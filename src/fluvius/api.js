@@ -32,6 +32,7 @@ export class FluviusClient {
     password = '',
     now = Date.now,
     authenticate = defaultAuthenticate,
+    pause = { until: 0 },
   } = {}) {
     this.email = email;
     this.password = password;
@@ -42,7 +43,16 @@ export class FluviusClient {
     this.signingIn = undefined;
     /** { until, error }: the last refusal, repeated without a call until `until`. */
     this.blocked = undefined;
-    this.pausedUntil = 0;
+    /** The 429 pause, an object the application keeps across restarts and clients. */
+    this.pause = pause;
+  }
+
+  get pausedUntil() {
+    return this.pause.until;
+  }
+
+  set pausedUntil(value) {
+    this.pause.until = value;
   }
 
   paused() {
@@ -131,7 +141,13 @@ export class FluviusClient {
       url.searchParams.set(key, value);
     }
     for (let attempt = 0; attempt < 2; attempt += 1) {
+      // A token obtained by this very call and refused at once: signing in
+      // again would only be refused again.
+      const known = Boolean(this.token) && this.now() < this.tokenExpires;
       const token = await this.accessToken();
+      if (!known) {
+        attempt = 1;
+      }
       const response = await this.guarded(() =>
         send(url.href, {
           headers: { Authorization: `Bearer ${token}`, Accept: 'application/json' },

@@ -16,17 +16,21 @@ the notes of the version's GitHub Release.
   (the Azure AD B2C flow of the website, over HTTP), ported from
   sander110419/Fluvius-home-assistant. A login asking for a second factor or
   another browser step is reported, never retried in a loop.
-- One device per configured meter (electricity and/or gas, by EAN): the
-  consumption fed, dated, to the Gladys energy monitoring with
-  `publishEnergyConsumption` (Gladys 5.2+), by half hour from the quarter-hour
-  (electricity) or hourly (gas) readings, or by day.
-- Plain sensors: the consumption and the injection of the latest complete day
-  published, and the monthly peak of the capacity tariff (kW). The injection
-  is never counted as consumption.
-- Four reads a day; the last days read again once a day (7 by default, up to 31) to catch late or corrected readings, the last 3 days otherwise.
+- One device per configured meter (by EAN). Electricity: the consumption
+  fed, dated, to the Gladys energy monitoring with `publishEnergyConsumption`
+  (Gladys 5.2+), by half hour from the quarter-hour readings, or by day; the
+  consumption and the injection of the latest complete day published and the
+  monthly peak of the capacity tariff (kW) as plain sensors. The injection is
+  never counted as consumption.
+- Gas: the total of the latest day published, as a plain sensor. The gas
+  stays out of the energy monitoring until Gladys handles gas contracts (it
+  would be priced at the electricity tariff).
+- Four reads a day; the last days read again once a day (7 by default, up
+  to 31) to catch late or corrected readings, the last 3 days otherwise.
 - Resilience: passing failures retried after 15, 30, 60, then every 120
-  minutes; refused credentials retried every 6 hours only; a 429 pauses every
-  call (1 minute to 6 hours); a 401 signs in again once.
+  minutes; refused credentials, a refused fresh token or a changed login
+  page retried every 6 hours only; a 429 pauses every call (1 minute to 6
+  hours), even across reconnections; a 401 signs in again once.
 - "Test the connection" button: signs in and reads yesterday's total of each
   meter.
 - Documentation in English, French and Dutch; `THIRD_PARTY_NOTICES.md` with

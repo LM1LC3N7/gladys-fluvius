@@ -18,10 +18,25 @@ import {
   lastDayFromDays,
   latestPeak,
   quartersOf,
+  time,
 } from '../src/fluvius/model.js';
 import { NOW, SPIKES, TZ, gasHours, quarters } from './fixtures/fluvius.js';
 
 const H = 60 * 60_000;
+
+test('an instant without offset is UTC, whatever the machine time zone', () => {
+  const utc = Date.parse('2026-10-14T22:00:00Z');
+  assert.equal(time('2026-10-14T22:00:00'), utc);
+  assert.equal(time('2026-10-14T22:00:00.000'), utc);
+  assert.equal(time('2026-10-14T22:00:00Z'), utc);
+  assert.equal(time('2026-10-15T00:00:00+02:00'), utc);
+  assert.equal(time('nope'), undefined);
+  assert.equal(time(12), undefined);
+  const [q] = quartersOf([
+    { d: '2026-10-14T22:00:00', de: '2026-10-14T22:15:00', v: [{ t: 1, v: 1, u: 3 }] },
+  ]);
+  assert.equal(q.start, utc);
+});
 
 test('a reading: t is the direction, dc the register, only kWh count (as the reference)', () => {
   // The case of the reference test `test_direction_mapping_handles_tariffs`.

@@ -44,6 +44,11 @@ test('the JSON objects of the B2C page are found without a regular expression', 
   // A huge hostile page is read once, linearly.
   const hostile = `var SETTINGS = {${'"a":1,'.repeat(200_000)}`;
   assert.throws(() => extractJsonVariable('SETTINGS', hostile), /login changed/);
+  // Every occurrence is tried: a mention in a comment, another name first.
+  const mentioned = `// var SETTINGS is set below\nvar SETTINGS_OLD = {"x":1};\n${page}`;
+  assert.deepEqual(extractJsonVariable('SETTINGS', mentioned), SETTINGS);
+  const broken = `var SETTINGS = {not json};\n${page}`;
+  assert.deepEqual(extractJsonVariable('SETTINGS', broken), SETTINGS);
 });
 
 test('the MSAL settings: scopes completed, foreign authority refused', () => {
@@ -164,6 +169,21 @@ test('sign-in: a redirect or a tenant outside Fluvius is refused, nothing sent t
   );
   await rejectsWith(authenticate(EMAIL, PASSWORD), 'login_changed');
   assert.ok(!fake.calls.some((c) => c.name === 'selfAsserted' || c.host === 'evil.example'));
+  // An allowed host that is neither the authority's nor Fluvius': no password.
+  fake.restore();
+  fake = installFetch(
+    fluviusRoutes({
+      authorize: () =>
+        html(
+          loginPage({
+            ...SETTINGS,
+            hosts: { ...SETTINGS.hosts, tenant: 'https://someone.b2clogin.com/t' },
+          }),
+        ),
+    }),
+  );
+  await rejectsWith(authenticate(EMAIL, PASSWORD), 'login_changed');
+  assert.ok(!fake.calls.some((c) => c.host === 'someone.b2clogin.com'));
 });
 
 test('sign-in: a changed login page, a state mismatch, a 5xx', async () => {
@@ -217,10 +237,30 @@ test('readings: EAN in the path, serial and asServiceProvider in the query, toke
 });
 
 test('a 401 signs in once and retries once, never in a loop', async () => {
+  let refused = false;
+  fake = installFetch(fluviusRoutes({ history: () => (refused ? json({}, 401) : json([])) }));
+  const c = client();
+  await c.history(ELEC_EAN, ELEC_SERIAL, range);
+  // The known token is refused: one new sign-in, one retry, then token_refused.
+  refused = true;
+  await rejectsWith(c.history(ELEC_EAN, ELEC_SERIAL, range), 'token_refused');
+  assert.equal(fake.named('history').length, 3);
+  assert.equal(fake.named('token').length, 2);
+});
+
+test('a token refused right after its sign-in is token_refused at once', async () => {
   fake = installFetch(fluviusRoutes({ history: () => json({}, 401) }));
   await rejectsWith(client().history(ELEC_EAN, ELEC_SERIAL, range), 'token_refused');
-  assert.equal(fake.named('history').length, 2);
-  assert.equal(fake.named('token').length, 2);
+  assert.equal(fake.named('history').length, 1);
+  assert.equal(fake.named('token').length, 1);
+});
+
+test('the 429 pause object is shared: a new client waits too', async () => {
+  const pause = { until: NOW + 60_000 };
+  fake = installFetch(fluviusRoutes());
+  const c = new FluviusClient({ email: EMAIL, password: PASSWORD, now: () => NOW, pause });
+  await rejectsWith(c.history(ELEC_EAN, ELEC_SERIAL, range), 'rate_limited');
+  assert.equal(fake.calls.length, 0);
 });
 
 test('refused credentials are not tried again for 6 hours', async () => {

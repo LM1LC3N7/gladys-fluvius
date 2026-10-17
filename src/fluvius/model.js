@@ -103,8 +103,12 @@ export function historyRange(from, to, timeZone) {
 
 // --- Readings -----------------------------------------------------------------------
 
-const time = (value) => {
-  const t = typeof value === 'string' ? Date.parse(value) : NaN;
+/** An instant of the API; a date-time without offset is UTC (as the reference reads it). */
+export const time = (value) => {
+  if (typeof value !== 'string') return undefined;
+  const withZone =
+    /T\d{2}:\d{2}/.test(value) && !/(Z|[+-]\d{2}:?\d{2})$/i.test(value) ? `${value}Z` : value;
+  const t = Date.parse(withZone);
   return Number.isFinite(t) ? t : undefined;
 };
 

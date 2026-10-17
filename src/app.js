@@ -19,7 +19,14 @@ import {
   TEST_ANSWER_WITHIN,
   TIME_ZONE,
 } from './constants.js';
-import { KIND, buildMeterDevice, consumptionKey, ids, meterStates } from './devices.js';
+import {
+  KIND,
+  buildMeterDevice,
+  consumptionKey,
+  ids,
+  meterStates,
+  resolutionOf,
+} from './devices.js';
 import { FluviusError } from './http.js';
 import { T, join } from './i18n.js';
 import { FluviusClient } from './fluvius/api.js';
@@ -27,10 +34,8 @@ import {
   dailyIntervals,
   daysBefore,
   daysOf,
-  halfHoursFromHours,
   halfHoursFromQuarters,
   historyRange,
-  hoursOf,
   lastCompleteDay,
   lastDayFromDays,
   latestPeak,
@@ -44,6 +49,22 @@ const defaultTimers = { setTimeout, clearTimeout, setInterval, clearInterval };
 /** Errors about one meter (wrong EAN, serial, or a meter of another account): the others go on. */
 const METER_ERRORS = new Set(['forbidden', 'not_found', 'bad_request']);
 const isMeterError = (err) => err instanceof FluviusError && METER_ERRORS.has(err.code);
+/** Errors that stop every call: they go up from any optional read. */
+const GLOBAL_ERRORS = new Set([
+  'rate_limited',
+  'bad_credentials',
+  'interaction_required',
+  'no_credentials',
+  'token_refused',
+]);
+/** Errors only a person (or an update of the integration) can solve: one try every 6 hours. */
+const SLOW_RETRY = {
+  bad_credentials: (h) => T.badCredentials(h),
+  no_credentials: (h) => T.badCredentials(h),
+  interaction_required: (h) => T.interaction(h),
+  token_refused: (h) => T.tokenRefused(h),
+  login_changed: (h, err) => T.loginChanged(h, err.message),
+};
 const minutes = (ms) => Math.max(1, Math.ceil(ms / 60_000));
 const hours = (ms) => Math.round(ms / 3_600_000);
 const validMeter = (m) => /^\d{18}$/.test(m.ean) && m.serial.length > 0;
@@ -69,10 +90,17 @@ export class FluviusApp {
     this.clientFactory = clientFactory;
     this.config = normalizeConfig();
     this.client = undefined;
-    /** `${kind}:${ean}` -> { meter, external, backfilledOn, lastDay, peak, refused, noDetailed } */
+    /** The 429 pause, kept across restarts, reconnections and clients. */
+    this.pause = { until: 0 };
+    /**
+     * `${kind}:${ean}` -> { meter, external, backfilledOn, lastDay, peak,
+     * refused, noDetailed, mismatch }
+     */
     this.entries = new Map();
     /** Devices created since the last connection (gladys.devices is refreshed on reconnection). */
     this.createdIds = new Set();
+    this.createdDevices = new Map();
+    this.firstRun = Promise.resolve();
     this.timerIds = [];
     this.retryTimer = undefined;
     this.retryIndex = 0;
@@ -93,9 +121,10 @@ export class FluviusApp {
     return this.serialize(() => this.doStop());
   }
 
-  /** Resolves once every queued start/stop is done (tests, shutdown). */
-  idle() {
-    return this.lifecycle;
+  /** Resolves once every queued start/stop and the first read after it are done (tests). */
+  async idle() {
+    await this.lifecycle;
+    await this.firstRun;
   }
 
   serialize(job) {
@@ -121,11 +150,19 @@ export class FluviusApp {
     const generation = ++this.generation;
     this.config = normalizeConfig(raw);
     this.retryIndex = 0;
+    const previous = this.entries;
     this.entries = new Map(
-      this.config.meters.map((meter) => [
-        `${meter.kind}:${meter.ean}`,
-        { meter, external: ids(this.gladys, meter.kind, meter.ean) },
-      ]),
+      this.config.meters.map((meter) => {
+        const key = `${meter.kind}:${meter.ean}`;
+        const known = previous.get(key);
+        // A reconnection keeps what was read (the full window is not read again).
+        return [
+          key,
+          known && known.meter.serial === meter.serial
+            ? { ...known, meter }
+            : { meter, external: ids(this.gladys, meter.kind, meter.ean) },
+        ];
+      }),
     );
     const problem = this.configProblem();
     if (problem) {
@@ -133,17 +170,29 @@ export class FluviusApp {
       await this.setStatus(false, problem);
       return;
     }
-    this.client = this.clientFactory({
-      email: this.config.email,
-      password: this.config.password,
-      now: this.now,
-    });
+    // The same credentials keep the client: its token and its refusal delay
+    // survive a reconnection or a save of the form.
+    if (
+      !this.client ||
+      this.client.email !== this.config.email ||
+      this.client.password !== this.config.password
+    ) {
+      this.client = this.clientFactory({
+        email: this.config.email,
+        password: this.config.password,
+        now: this.now,
+        pause: this.pause,
+      });
+    }
     await this.discover();
     // Always armed, whatever the first read gave: never a dead integration.
     this.timerIds.push(
       this.timers.setInterval(() => this.run(generation, () => this.poll()), POLL_INTERVAL),
     );
-    await this.run(generation, () => this.poll());
+    // Not awaited: a start (a save of the form) answers at once.
+    // A read of the previous start still running is let finish first.
+    const running = this.polling?.catch(() => {});
+    this.firstRun = Promise.resolve(running).then(() => this.run(generation, () => this.poll()));
   }
 
   async doStop() {
@@ -188,11 +237,8 @@ export class FluviusApp {
       const delay = err.retryAfter ?? RATE_LIMIT_PAUSE;
       await this.setStatus(false, T.rateLimited(minutes(delay)));
       this.scheduleRetry(delay + 1000);
-    } else if (code === 'bad_credentials' || code === 'no_credentials') {
-      await this.setStatus(false, T.badCredentials(hours(CREDENTIALS_RETRY)));
-      this.scheduleRetry(CREDENTIALS_RETRY);
-    } else if (code === 'interaction_required') {
-      await this.setStatus(false, T.interaction(hours(CREDENTIALS_RETRY)));
+    } else if (SLOW_RETRY[code]) {
+      await this.setStatus(false, SLOW_RETRY[code](hours(CREDENTIALS_RETRY), err));
       this.scheduleRetry(CREDENTIALS_RETRY);
     } else {
       const delay = RETRY_BACKOFF[Math.min(this.retryIndex, RETRY_BACKOFF.length - 1)];
@@ -220,7 +266,9 @@ export class FluviusApp {
       await this.setStatus(true, T.noDevice);
       return;
     }
-    const problems = created.map((e) => e.refused ?? e.noDetailed).filter(Boolean);
+    const problems = created
+      .flatMap((e) => [e.refused ?? e.noDetailed, e.mismatch])
+      .filter(Boolean);
     const ok = T.ok(created.map((e) => ({ meter: e.meter, date: e.lastDay?.date })));
     await this.setStatus(true, problems.length > 0 ? join([...problems, ok]) : ok);
   }
@@ -253,6 +301,7 @@ export class FluviusApp {
       return;
     }
     this.createdIds.add(id);
+    this.createdDevices.set(id, device);
     const entry = [...this.entries.values()].find((e) => e.external.device === id);
     if (entry && this.client) {
       entry.backfilledOn = undefined;
@@ -264,6 +313,7 @@ export class FluviusApp {
 
   onDeviceDeleted(device) {
     this.createdIds.delete(device?.external_id);
+    this.createdDevices.delete(device?.external_id);
   }
 
   // --- Readings ----------------------------------------------------------------------
@@ -309,8 +359,11 @@ export class FluviusApp {
       TIME_ZONE,
     );
     const gas = meter.kind === KIND.GAS;
-    const daily = this.config.resolution === RESOLUTION.DAILY;
-    let intervals;
+    // The gas only shows its daily total (it stays out of the energy
+    // monitoring); the electricity follows the feature of the created device.
+    const resolution = gas ? RESOLUTION.DAILY : this.resolutionFor(entry);
+    const daily = resolution === RESOLUTION.DAILY;
+    let intervals = [];
     let lastDay;
     try {
       if (daily) {
@@ -320,19 +373,24 @@ export class FluviusApp {
             granularity: GRANULARITY.DAY,
           }),
         );
-        intervals = dailyIntervals(readings, now, TIME_ZONE);
+        if (!gas) {
+          intervals = dailyIntervals(readings, now, TIME_ZONE);
+        }
         lastDay = lastDayFromDays(readings, TIME_ZONE);
       } else {
         // One request per local day, as the reference does.
         const periods = [];
         for (const day of days) {
-          const payload = await this.client.history(meter.ean, meter.serial, {
-            ...historyRange(day.from, day.to, TIME_ZONE),
-            granularity: gas ? GRANULARITY.HOUR : GRANULARITY.QUARTER_HOUR,
-          });
-          periods.push(...(gas ? hoursOf(payload) : quartersOf(payload)));
+          periods.push(
+            ...quartersOf(
+              await this.client.history(meter.ean, meter.serial, {
+                ...historyRange(day.from, day.to, TIME_ZONE),
+                granularity: GRANULARITY.QUARTER_HOUR,
+              }),
+            ),
+          );
         }
-        intervals = gas ? halfHoursFromHours(periods, now) : halfHoursFromQuarters(periods, now);
+        intervals = halfHoursFromQuarters(periods, now);
         lastDay = lastCompleteDay(periods, days);
       }
     } catch (err) {
@@ -354,12 +412,13 @@ export class FluviusApp {
     if (lastDay && (!entry.lastDay || lastDay.date >= entry.lastDay.date)) {
       entry.lastDay = gas ? { date: lastDay.date, consumption: lastDay.consumption } : lastDay;
     }
-    if (!gas) {
-      entry.peak = (await this.readPeak(entry, now)) ?? entry.peak;
-    }
-    const published = await this.publishConsumption(entry, intervals);
+    // The consumption first: a failed peak read never holds it back.
+    const published = gas || (await this.publishConsumption(entry, intervals, resolution));
     if (full && published) {
       entry.backfilledOn = today;
+    }
+    if (!gas) {
+      entry.peak = (await this.readPeak(entry, now)) ?? entry.peak;
     }
     const states = meterStates(entry.external, entry);
     if (states.length > 0) {
@@ -381,17 +440,35 @@ export class FluviusApp {
       });
       return latestPeak(payload, TIME_ZONE);
     } catch (err) {
-      if (!isMeterError(err)) {
+      // Only what stops every call goes up; anything else keeps the old peak.
+      if (err instanceof FluviusError && GLOBAL_ERRORS.has(err.code)) {
         throw err;
       }
-      this.logger.warn(`Fluvius peak unavailable: ${err.message}`);
+      this.logger.warn(`Fluvius peak unavailable: ${err?.message ?? err}`);
       return undefined;
     }
   }
 
+  /**
+   * The resolution of an electricity meter: the one of the consumption
+   * feature of its created device (its type is fixed at creation), else the
+   * configuration. A difference is shown in the status.
+   */
+  resolutionFor(entry) {
+    const device =
+      this.createdDevices.get(entry.external.device) ??
+      (this.gladys.devices ?? []).find((d) => d.external_id === entry.external.device);
+    const created = resolutionOf(device);
+    entry.mismatch =
+      created && created !== this.config.resolution
+        ? T.resolutionMismatch(entry.meter, created)
+        : undefined;
+    return created ?? this.config.resolution;
+  }
+
   /** Resolves true when Gladys took every interval (or there was none). */
-  async publishConsumption(entry, intervals) {
-    const feature = entry.external.feature(consumptionKey(this.config.resolution));
+  async publishConsumption(entry, intervals, resolution) {
+    const feature = entry.external.feature(consumptionKey(resolution));
     try {
       for (let i = 0; i < intervals.length; i += MAX_INTERVALS_PER_CALL) {
         await this.gladys.publishEnergyConsumption(
@@ -414,10 +491,7 @@ export class FluviusApp {
   messageOf(err) {
     const code = err instanceof FluviusError ? err.code : 'unknown';
     if (code === 'rate_limited') return T.rateLimited(minutes(err.retryAfter ?? RATE_LIMIT_PAUSE));
-    if (code === 'bad_credentials' || code === 'no_credentials') {
-      return T.badCredentials(hours(CREDENTIALS_RETRY));
-    }
-    if (code === 'interaction_required') return T.interaction(hours(CREDENTIALS_RETRY));
+    if (SLOW_RETRY[code]) return SLOW_RETRY[code](hours(CREDENTIALS_RETRY), err);
     return T.retry(minutes(RETRY_BACKOFF[0]), err?.message ?? String(err));
   }
 

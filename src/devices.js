@@ -8,11 +8,15 @@
 // replaced meter (new serial number) keeps the same device and its history.
 //
 // Energy monitoring rules (Gladys core):
-// - the consumption is dated by Fluvius and published after the fact with
-//   publishEnergyConsumption, on a `thirty-minutes-consumption` feature
-//   (detailed readings) or a `daily-consumption` one (daily readings), never
-//   through publishStates, and there is NO index feature (an index published
-//   a day late would pile a whole day into one half hour);
+// - the electricity consumption is dated by Fluvius and published after the
+//   fact with publishEnergyConsumption, on a `thirty-minutes-consumption`
+//   feature (detailed readings) or a `daily-consumption` one (daily
+//   readings), never through publishStates, and there is NO index feature (an
+//   index published a day late would pile a whole day into one half hour);
+// - the gas is NOT in the energy monitoring: a consumption published there is
+//   attached to the main electric meter and priced at the electricity tariff
+//   (the core has no gas contract yet). The gas device only shows the total of
+//   the last published day;
 // - the injection is never put in a consumption or index feature (it would
 //   be billed as consumption): the core has no dated production path for an
 //   integration, so it is a plain sensor, without effect on the bill;
@@ -45,6 +49,17 @@ export const ids = (gladys, kind, ean) => gladys.externalIds(kind, String(ean));
 export const consumptionKey = (resolution) =>
   resolution === RESOLUTION.DAILY ? FEATURE.DAILY_CONSUMPTION : FEATURE.CONSUMPTION;
 
+/**
+ * The resolution of the consumption feature a CREATED device carries (its
+ * type is fixed at creation), or undefined when it has none.
+ */
+export function resolutionOf(device) {
+  const keys = (device?.features ?? []).map((f) => String(f.external_id).split(':').at(-1));
+  if (keys.includes(FEATURE.CONSUMPTION)) return RESOLUTION.DETAILED;
+  if (keys.includes(FEATURE.DAILY_CONSUMPTION)) return RESOLUTION.DAILY;
+  return undefined;
+}
+
 const feature = (external, key, name, category, type, extra = {}) => ({
   name,
   external_id: external.feature(key),
@@ -64,29 +79,46 @@ const plain = (external, key, name, max) =>
 
 export function buildMeterDevice(gladys, meter, resolution) {
   const external = ids(gladys, meter.kind, meter.ean);
-  const gas = meter.kind === KIND.GAS;
+  if (meter.kind === KIND.GAS) {
+    return {
+      name: `Fluvius gas (EAN …${meter.ean.slice(-4)})`,
+      external_id: external.device,
+      features: [
+        plain(
+          external,
+          FEATURE.CONSUMPTION_LAST_DAY,
+          'Consumption, last published day (kWh)',
+          100_000,
+        ),
+      ],
+      params: [
+        { name: 'ean', value: meter.ean },
+        { name: 'meter_serial', value: meter.serial },
+      ],
+    };
+  }
   const daily = resolution === RESOLUTION.DAILY;
-  const features = [
-    feature(
-      external,
-      consumptionKey(resolution),
-      daily ? 'Consumption (day)' : 'Consumption (30 min)',
-      C.ENERGY_SENSOR,
-      daily ? T.ENERGY_SENSOR.DAILY_CONSUMPTION : T.ENERGY_SENSOR.THIRTY_MINUTES_CONSUMPTION,
-      { unit: U.KILOWATT_HOUR, max: daily ? 100_000 : 10_000 },
-    ),
-    plain(external, FEATURE.CONSUMPTION_LAST_DAY, 'Consumption, last published day (kWh)', 100_000),
-  ];
-  if (!gas) {
-    features.push(
+  return {
+    name: `Fluvius electricity (EAN …${meter.ean.slice(-4)})`,
+    external_id: external.device,
+    features: [
+      feature(
+        external,
+        consumptionKey(resolution),
+        daily ? 'Consumption (day)' : 'Consumption (30 min)',
+        C.ENERGY_SENSOR,
+        daily ? T.ENERGY_SENSOR.DAILY_CONSUMPTION : T.ENERGY_SENSOR.THIRTY_MINUTES_CONSUMPTION,
+        { unit: U.KILOWATT_HOUR, max: daily ? 100_000 : 10_000 },
+      ),
+      plain(
+        external,
+        FEATURE.CONSUMPTION_LAST_DAY,
+        'Consumption, last published day (kWh)',
+        100_000,
+      ),
       plain(external, FEATURE.INJECTION_LAST_DAY, 'Injection, last published day (kWh)', 100_000),
       plain(external, FEATURE.CAPACITY_PEAK, 'Monthly peak, capacity tariff (kW)', 1000),
-    );
-  }
-  return {
-    name: `Fluvius ${gas ? 'gas' : 'electricity'} (EAN …${meter.ean.slice(-4)})`,
-    external_id: external.device,
-    features,
+    ],
     params: [
       { name: 'ean', value: meter.ean },
       { name: 'meter_serial', value: meter.serial },

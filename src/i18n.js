@@ -35,6 +35,18 @@ export const T = {
     en: `The Fluvius login asks for a step only a browser can do (two-step verification, new terms, password change). Sign in once on mijn.fluvius.be, or turn two-step verification off; this integration cannot enter a code. New try in ${hours} h.`,
     fr: `La connexion Fluvius demande une étape que seul un navigateur peut faire (double authentification, nouvelles conditions, changement de mot de passe). Connectez-vous une fois sur mijn.fluvius.be, ou désactivez la double authentification : cette intégration ne sait pas saisir de code. Nouvel essai dans ${hours} h.`,
   }),
+  tokenRefused: (hours) => ({
+    en: `Fluvius refused a fresh access token: the account may not reach its readings this way any more. New try in ${hours} h.`,
+    fr: `Fluvius a refusé un jeton d’accès tout neuf : le compte ne peut peut-être plus lire ses relevés ainsi. Nouvel essai dans ${hours} h.`,
+  }),
+  loginChanged: (hours, message) => ({
+    en: `${message}: the integration may need an update. New try in ${hours} h.`,
+    fr: `La connexion Fluvius a changé (${message}) : l’intégration doit peut-être être mise à jour. Nouvel essai dans ${hours} h.`,
+  }),
+  resolutionMismatch: (meter, created) => ({
+    en: `The ${label(meter).en} device was created with ${created === 'daily' ? 'daily' : 'detailed'} readings, which are still used: delete it and create it again to change.`,
+    fr: `L’appareil ${label(meter).fr} a été créé avec les relevés ${created === 'daily' ? 'journaliers' : 'détaillés'}, toujours utilisés : supprimez-le et recréez-le pour changer.`,
+  }),
   rateLimited: (minutes) => ({
     en: `Fluvius asked to slow down: every call paused for ${minutes} min.`,
     fr: `Fluvius demande de ralentir : tous les appels sont suspendus ${minutes} min.`,
@@ -56,8 +68,8 @@ export const T = {
     fr: `Fluvius a refusé les relevés du compteur ${label(meter).fr} (${message}) : vérifiez son EAN et son numéro de série, et que le compte le gère.`,
   }),
   noDetailed: (meter, days) => ({
-    en: `No detailed readings for the ${label(meter).en} meter over the last ${days} days: turn the quarter-hour (or hourly gas) readings on in Mijn Fluvius, or choose daily readings.`,
-    fr: `Aucun relevé détaillé pour le compteur ${label(meter).fr} sur les ${days} derniers jours : activez les relevés au quart d’heure (ou horaires pour le gaz) dans Mijn Fluvius, ou choisissez les relevés journaliers.`,
+    en: `No detailed readings for the ${label(meter).en} meter over the last ${days} days: turn the quarter-hour readings on in Mijn Fluvius, or choose daily readings.`,
+    fr: `Aucun relevé détaillé pour le compteur ${label(meter).fr} sur les ${days} derniers jours : activez les relevés au quart d’heure dans Mijn Fluvius, ou choisissez les relevés journaliers.`,
   }),
   test: {
     ok: (parts) => ({

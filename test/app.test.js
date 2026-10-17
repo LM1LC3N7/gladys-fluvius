@@ -28,6 +28,7 @@ import {
   GAS_SERIAL,
   NOW,
   PASSWORD,
+  SPIKES,
   fluviusRoutes,
 } from './fixtures/fluvius.js';
 
@@ -88,6 +89,7 @@ test('no credentials, no meter, a wrong EAN: the status says so, nothing is call
   ]) {
     const { app, gladys, timers } = await setup({ config });
     await app.start(config);
+    await app.idle();
     assert.equal(status(gladys).connected, false);
     assert.match(status(gladys).message.fr, pattern);
     assert.equal(fake.calls.length, 0);
@@ -99,6 +101,7 @@ test('no credentials, no meter, a wrong EAN: the status says so, nothing is call
 test('the devices: dated consumption, plain sensors, never an index nor a billed injection', async () => {
   const { app, gladys, timers } = await setup();
   await app.start(CONFIG);
+  await app.idle();
   const devices = gladys.fake.discoveredDevices;
   assert.deepEqual(
     devices.map((d) => [d.external_id, d.name]),
@@ -114,7 +117,9 @@ test('the devices: dated consumption, plain sensors, never an index nor a billed
     'injection_last_day',
     'capacity_peak',
   ]);
-  assert.deepEqual(keys(devices[1]), ['consumption', 'consumption_last_day']);
+  // The gas stays out of the energy monitoring: its daily total only.
+  assert.deepEqual(keys(devices[1]), ['consumption_last_day']);
+  assert.ok(!devices[1].features.some((f) => f.category === C.ENERGY_SENSOR));
   for (const f of devices.flatMap((d) => d.features)) {
     assert.ok(f.read_only);
     // No cumulative index anywhere: the core would derive (and bill) it.
@@ -135,6 +140,7 @@ test('detailed readings: 7 days once a day, then the last 3 days, upserted by in
     devices: [created('electricity'), created('gas')],
   });
   await app.start(CONFIG);
+  await app.idle();
   assert.deepEqual(
     fake.calls.map((c) => c.name),
     [
@@ -145,29 +151,32 @@ test('detailed readings: 7 days once a day, then the last 3 days, upserted by in
       'token',
       ...Array(7).fill('history'),
       'spikes',
-      ...Array(7).fill('history'),
+      'history',
     ],
   );
   const elecReads = fake.named('history').filter((c) => c.path.endsWith(ELEC_EAN));
   assert.equal(elecReads[0].query.historyFrom, '2026-10-09T00:00:00.000+02:00');
   assert.equal(elecReads.at(-1).query.historyUntil, '2026-10-15T23:59:59.999+02:00');
   assert.ok(elecReads.every((c) => c.query.granularity === '1'));
-  assert.ok(
-    fake
-      .named('history')
-      .filter((c) => c.path.endsWith(GAS_EAN))
-      .every((c) => c.query.granularity === '2'),
-  );
+  // The gas is read by day, in one request.
+  const gasReads = fake.named('history').filter((c) => c.path.endsWith(GAS_EAN));
+  assert.equal(gasReads.length, 1);
+  assert.equal(gasReads[0].query.granularity, '4');
   // 7 days of 48 half hours, 0.2 kWh each (two quarters of 0.1).
   const elec = consumption(gladys, ELEC);
   assert.equal(elec.length, 7 * 48);
   assert.ok(elec.every((s) => s.kwh === 0.2));
-  assert.equal(consumption(gladys, GAS).length, 7 * 48);
+  // Nothing of the gas reaches the energy monitoring.
+  assert.ok(
+    gladys.fake.publishedEnergyConsumption.every(
+      (b) => !b.device_feature_external_id.startsWith(GAS),
+    ),
+  );
   // The plain sensors: yesterday's totals and the latest monthly peak.
   assert.equal(gladys.fake.lastState(`${ELEC}:consumption_last_day`), 9.6);
   assert.equal(gladys.fake.lastState(`${ELEC}:injection_last_day`), 1.92);
   assert.equal(gladys.fake.lastState(`${ELEC}:capacity_peak`), 3.456);
-  assert.equal(gladys.fake.lastState(`${GAS}:consumption_last_day`), 28.8);
+  assert.equal(gladys.fake.lastState(`${GAS}:consumption_last_day`), 9.6);
   assert.equal(gladys.fake.lastState(`${GAS}:injection_last_day`), undefined);
   assert.equal(status(gladys).connected, true);
   assert.match(status(gladys).message.en, /electricity \(EAN …0001\) 2026-10-15/);
@@ -178,7 +187,7 @@ test('detailed readings: 7 days once a day, then the last 3 days, upserted by in
   const before = fake.calls.length;
   await timers.runIntervals();
   const again = fake.calls.slice(before);
-  assert.equal(again.filter((c) => c.name === 'history').length, 6);
+  assert.equal(again.filter((c) => c.name === 'history').length, 4);
   assert.equal(again.filter((c) => c.name === 'token').length, 1);
   assert.equal(consumption(gladys, ELEC).length, 7 * 48, 'nothing counted twice');
 
@@ -186,7 +195,7 @@ test('detailed readings: 7 days once a day, then the last 3 days, upserted by in
   clock.now += 24 * 60 * 60_000;
   const next = fake.calls.length;
   await timers.runIntervals();
-  assert.equal(fake.calls.slice(next).filter((c) => c.name === 'history').length, 14);
+  assert.equal(fake.calls.slice(next).filter((c) => c.name === 'history').length, 8);
 });
 
 test('daily readings: one request per meter, a daily consumption dated by its local day', async () => {
@@ -196,6 +205,7 @@ test('daily readings: one request per meter, a daily consumption dated by its lo
     devices: [created('electricity', 'daily'), created('gas', 'daily')],
   });
   await app.start(config);
+  await app.idle();
   const reads = fake.named('history');
   assert.equal(reads.length, 2);
   assert.ok(reads.every((c) => c.query.granularity === '4'));
@@ -212,6 +222,38 @@ test('daily readings: one request per meter, a daily consumption dated by its lo
     ],
   );
   assert.equal(gladys.fake.lastState(`${ELEC}:injection_last_day`), 1.92);
+  assert.equal(consumption(gladys, GAS, 'daily_consumption').length, 0);
+});
+
+test('the readings follow the feature of the created device, a different setting is shown', async () => {
+  const config = { ...CONFIG, resolution: 'daily', gas_ean: '', gas_serial: '' };
+  const { app, gladys } = await setup({ config, devices: [created('electricity')] });
+  await app.start(config);
+  await app.idle();
+  assert.ok(fake.named('history').every((c) => c.query.granularity === '1'));
+  assert.equal(consumption(gladys, ELEC).length, 7 * 48);
+  assert.match(status(gladys).message.en, /created with detailed readings/);
+});
+
+test('a failed peak read never holds the consumption back, the previous peak is kept', async () => {
+  let broken = false;
+  const routes = {
+    spikes: () => (broken ? json({}, 500) : json(SPIKES)),
+  };
+  const { app, gladys, clock, timers } = await setup({
+    routes,
+    devices: [created('electricity')],
+  });
+  await app.start(CONFIG);
+  await app.idle();
+  assert.equal(gladys.fake.lastState(`${ELEC}:capacity_peak`), 3.456);
+  broken = true;
+  clock.now += 24 * 60 * 60_000;
+  await timers.runIntervals();
+  assert.equal(consumption(gladys, ELEC).length, 8 * 48, 'the new day published');
+  assert.equal(status(gladys).connected, true);
+  assert.equal(app.entries.get(`electricity:${ELEC_EAN}`).peak.kw, 3.456);
+  assert.equal(timers.timeouts().length, 0);
 });
 
 test('no detailed reading over the window: the status explains how to turn them on', async () => {
@@ -220,6 +262,7 @@ test('no detailed reading over the window: the status explains how to turn them 
     devices: [created('electricity')],
   });
   await app.start(CONFIG);
+  await app.idle();
   assert.equal(status(gladys).connected, true);
   assert.match(status(gladys).message.en, /turn the quarter-hour/);
 });
@@ -234,7 +277,8 @@ test('a meter refused by Fluvius: said in the status, the other meter still read
     devices: [created('electricity'), created('gas')],
   });
   await app.start(CONFIG);
-  assert.equal(consumption(gladys, GAS).length, 7 * 48);
+  await app.idle();
+  assert.equal(gladys.fake.lastState(`${GAS}:consumption_last_day`), 9.6);
   assert.match(status(gladys).message.fr, /a refusé les relevés du compteur électricité/);
   assert.equal(timers.timeouts().length, 0, 'not a passing failure: no fast retry');
 });
@@ -243,6 +287,7 @@ test('refused credentials: said, tried again in 6 hours only, the poll stays arm
   const config = { ...CONFIG, password: 'wrong' };
   const { app, gladys, timers } = await setup({ config, devices: [created('electricity')] });
   await app.start(config);
+  await app.idle();
   assert.equal(status(gladys).connected, false);
   assert.match(status(gladys).message.en, /refused the e-mail or the password.*6 h/);
   assert.deepEqual(
@@ -261,6 +306,7 @@ test('two-step verification asked: said clearly, no loop', async () => {
     devices: [created('electricity')],
   });
   await app.start(CONFIG);
+  await app.idle();
   assert.match(status(gladys).message.fr, /double authentification/);
   assert.deepEqual(
     timers.timeouts().map((t) => t.ms),
@@ -276,6 +322,7 @@ test('a 429 pauses everything, then the read resumes', async () => {
   };
   const { app, gladys, timers, clock } = await setup({ routes, devices: [created('electricity')] });
   await app.start(CONFIG);
+  await app.idle();
   assert.match(status(gladys).message.en, /slow down: every call paused for 2 min/);
   const [retry] = timers.timeouts();
   assert.equal(retry.ms, 121_000);
@@ -298,6 +345,7 @@ test('a passing failure: backoff 15, 30, 60 min, then the next success resets it
   };
   const { app, gladys, timers } = await setup({ routes, devices: [created('electricity')] });
   await app.start(CONFIG);
+  await app.idle();
   assert.match(status(gladys).message.en, /new try in 15 min/);
   const delays = [timers.timeouts()[0].ms];
   for (let i = 0; i < 2; i += 1) {
@@ -315,6 +363,7 @@ test('a passing failure: backoff 15, 30, 60 min, then the next success resets it
 test('a device created later is read right away', async () => {
   const { app, gladys } = await setup();
   await app.start(CONFIG);
+  await app.idle();
   assert.equal(fake.calls.length, 0);
   const device = created('electricity');
   gladys.fake.devices.push(device);
@@ -326,6 +375,7 @@ test('a device created later is read right away', async () => {
 test('the test button: sign-in and yesterday of each meter', async () => {
   const { app, gladys } = await setup();
   await app.start(CONFIG);
+  await app.idle();
   const ack = await gladys.fake.action(ACTIONS.TEST, {});
   assert.equal(ack.success, true);
   assert.match(
@@ -334,6 +384,7 @@ test('the test button: sign-in and yesterday of each meter', async () => {
   );
   const bad = { ...CONFIG, password: 'nope' };
   await app.start(bad);
+  await app.idle();
   const refused = await gladys.fake.action(ACTIONS.TEST, {});
   assert.match(refused.data.message.fr, /refusé l’e-mail ou le mot de passe/);
 });
@@ -342,7 +393,9 @@ test('the logs never hold the e-mail, the password, a token or a code', async ()
   const routes = { history: () => json({}, 401) };
   const { app, logger } = await setup({ routes, devices: [created('electricity')] });
   await app.start(CONFIG);
+  await app.idle();
   await app.start({ ...CONFIG, password: 'wrong' });
+  await app.idle();
   const text = logger.lines.join('\n');
   assert.ok(logger.lines.length > 0);
   for (const secret of [EMAIL, PASSWORD, 'wrong', 'acc-1', 'code-1', 'csrf-token-1']) {
@@ -351,10 +404,54 @@ test('the logs never hold the e-mail, the password, a token or a code', async ()
   assert.ok(!/https?:\/\//.test(text), 'no URL');
 });
 
-test('a stop clears every timer; a restart replaces the client', async () => {
+test('a fresh token refused, or a changed login page: one try every 6 hours, said so', async () => {
+  for (const [routes, pattern] of [
+    [{ history: () => json({}, 401) }, /refused a fresh access token.*6 h/],
+    [{ authorize: () => new Response('<html>new</html>') }, /login changed.*6 h/],
+  ]) {
+    const { app, gladys, timers } = await setup({ routes, devices: [created('electricity')] });
+    await app.start(CONFIG);
+    await app.idle();
+    assert.match(status(gladys).message.en, pattern);
+    assert.deepEqual(
+      timers.timeouts().map((t) => t.ms),
+      [CREDENTIALS_RETRY],
+    );
+    // The token was obtained by that very call: no second sign-in.
+    assert.ok(fake.named('token').length <= 1);
+    await app.stop();
+    fake.restore();
+  }
+});
+
+test('a start answers before the read; a stop clears every timer', async () => {
   const { app, timers } = await setup({ devices: [created('electricity')] });
   await app.start(CONFIG);
+  assert.equal(fake.named('history').length, 0, 'the read runs after the start resolved');
+  await app.idle();
+  assert.ok(fake.named('history').length > 0);
   assert.ok(timers.pending.size > 0);
   await app.stop();
   assert.equal(timers.pending.size, 0);
+});
+
+test('a reconnection keeps the client, its token, the 429 pause and the state of the day', async () => {
+  const { app, gladys } = await setup({ devices: [created('electricity')] });
+  await app.start(CONFIG);
+  await app.idle();
+  const client = app.client;
+  await app.stop();
+  await app.start(CONFIG);
+  await app.idle();
+  assert.equal(app.client, client);
+  assert.equal(fake.named('token').length, 1, 'no new sign-in');
+  // Same day: only the recent days again.
+  assert.equal(fake.named('history').length, 7 + 3);
+  // New credentials: a new client, but the 429 pause stays.
+  app.pause.until = NOW + 600_000;
+  await app.start({ ...CONFIG, password: 'other' });
+  await app.idle();
+  assert.notEqual(app.client, client);
+  assert.equal(fake.named('token').length, 1, 'nothing sent during the pause');
+  assert.match(status(gladys).message.en, /paused for 10 min/);
 });

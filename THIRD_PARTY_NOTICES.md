@@ -6,7 +6,8 @@ license.
 
 ## sander110419/Fluvius-home-assistant
 
-<https://github.com/sander110419/Fluvius-home-assistant>
+<https://github.com/sander110419/Fluvius-home-assistant>, by sander110419
+(Sander Hilven).
 
 Ported to JavaScript in `src/fluvius/auth.js`, `src/fluvius/api.js` and
 `src/fluvius/model.js`: the Mijn Fluvius sign-in over HTTP (MSAL settings,
@@ -17,8 +18,9 @@ parameters of the readings (`meter-measurement-history`,
 `meterSerialNumber`), the meaning of a reading (direction, tariff register,
 kWh and m³ units), the quarter-hour and hourly periods, and the monthly peaks.
 
-The license file of that repository reads as follows (its copyright line is
-the one of the template it started from):
+Its license, reproduced as it appears in the repository (commit 183700a). The
+copyright line is the one of the template the project started from; the
+author of the ported code is sander110419.
 
 ```
 MIT License

@@ -37,35 +37,40 @@ export function pkcePair(random = randomBytes) {
 
 const changed = (what) => new FluviusError('login_changed', `The Fluvius login changed (${what})`);
 
+const MAX_OCCURRENCES = 20;
+
 /**
- * The JSON object assigned to `var <name> = {...};` in the B2C page. Linear:
- * one search for the name, one for the first `};` after it (what the
- * reference's lazy regular expression matches).
+ * The JSON object assigned to `var <name> = {...};` in the B2C page: from
+ * `{` to the first `};` after it (what the reference's lazy regular
+ * expression matches), found with `indexOf` only. Every occurrence of the
+ * name is tried (a comment or another script may mention it first), at most
+ * MAX_OCCURRENCES, so a hostile page stays cheap.
  */
 export function extractJsonVariable(name, html) {
-  const at = html.indexOf(`var ${name}`);
-  if (at < 0) {
-    throw changed(`no ${name}`);
+  const marker = `var ${name}`;
+  let found = false;
+  for (
+    let at = html.indexOf(marker), n = 0;
+    at >= 0 && n < MAX_OCCURRENCES;
+    at = html.indexOf(marker, at + marker.length), n += 1
+  ) {
+    let i = at + marker.length;
+    // `var SETTINGS_X`: another name.
+    if (/[\w$]/.test(html[i] ?? '')) continue;
+    while (i < html.length && /\s/.test(html[i])) i += 1;
+    if (html[i] !== '=') continue;
+    i += 1;
+    while (i < html.length && /\s/.test(html[i])) i += 1;
+    if (html[i] !== '{') continue;
+    const end = html.indexOf('};', i);
+    if (end < 0) break;
+    found = true;
+    const value = parseJson(html.slice(i, end + 1));
+    if (value && typeof value === 'object') {
+      return value;
+    }
   }
-  let i = at + 4 + name.length;
-  while (i < html.length && /\s/.test(html[i])) i += 1;
-  if (html[i] !== '=') {
-    throw changed(`no ${name}`);
-  }
-  i += 1;
-  while (i < html.length && /\s/.test(html[i])) i += 1;
-  if (html[i] !== '{') {
-    throw changed(`no ${name}`);
-  }
-  const end = html.indexOf('};', i);
-  if (end < 0) {
-    throw changed(`no ${name}`);
-  }
-  const value = parseJson(html.slice(i, end + 1));
-  if (!value || typeof value !== 'object') {
-    throw changed(`${name} is not JSON`);
-  }
-  return value;
+  throw changed(found ? `${name} is not JSON` : `no ${name}`);
 }
 
 /** The scopes asked: those of the MSAL settings, plus openid, offline_access and the API's. */
@@ -212,7 +217,16 @@ export async function authenticate(email, password, { random = randomBytes } = {
   const tenantBase = (
     /^https?:/i.test(tenant) ? tenant : new URL(tenant.replace(/^\/+/, ''), `${origin}/`).href
   ).replace(/\/+$/, '');
-  if (!isAllowedUrl(tenantBase)) {
+  // The password is posted only to the host of the authority or to Fluvius.
+  const tenantHost = isAllowedUrl(tenantBase) ? new URL(tenantBase).hostname.toLowerCase() : '';
+  if (
+    !tenantHost ||
+    !(
+      tenantHost === new URL(authority).hostname.toLowerCase() ||
+      tenantHost === 'fluvius.be' ||
+      tenantHost.endsWith('.fluvius.be')
+    )
+  ) {
     throw changed('unexpected tenant');
   }
 

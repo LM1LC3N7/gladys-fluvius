@@ -64,15 +64,18 @@ test/                             node --test, against the SDK's fake Gladys (in
 
 - **Fluvius keys are forever too**: the external ids `electricity:<EAN>`,
   `gas:<EAN>`, the `FEATURE` keys of `src/devices.js`, the manifest keys.
-- **Energy monitoring**: the consumption goes ONLY through
+- **Energy monitoring**: the electricity consumption goes ONLY through
   `publishEnergyConsumption` (dated by Fluvius), never `publishStates`, and
   there is no index feature. The injection never goes into a consumption or
-  index feature (it would be billed): it is a plain `unknown` sensor.
+  index feature (it would be billed): it is a plain `unknown` sensor. The gas
+  stays OUT of the energy monitoring (the core would price it at the
+  electricity tariff) until Gladys handles gas contracts.
 - **Be polite with Fluvius**: 4 reads a day, the full window once a day, the
   last 3 days otherwise, one sign-in per expired token, refused credentials
   tried again every 6 hours only, a 429 pauses every call (1 min to 6 h).
 - **The password goes to Fluvius only**: every URL must pass `isAllowedUrl`
-  (https, `*.fluvius.be`, `*.b2clogin.com`). Never log a URL, a body, a
+  (https, `*.fluvius.be`, `*.b2clogin.com`), and the password is posted only
+  to the host of the authority or to `*.fluvius.be`. Never log a URL, a body, a
   header, the e-mail, the password, a code or a token.
 - **External ids are forever.** Build them with
   `gladys.externalIds(type, platformId)`, `platformId` being the unique id the
