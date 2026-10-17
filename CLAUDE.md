@@ -11,13 +11,24 @@ Gladys through
 [`@gladysassistant/integration-sdk`](https://github.com/GladysAssistant/integration-sdk-js),
 its only runtime dependency. It started from the official JavaScript template.
 
+It reads the **Fluvius** digital meter (Flanders, Belgium) through the
+customer portal **Mijn Fluvius**: the Azure AD B2C sign-in of the website
+(e-mail and password, PKCE, driven over HTTP), then the readings endpoints of
+`mijn.fluvius.be/verbruik/api`. The flow and the meaning of the answers are
+ported from
+[sander110419/Fluvius-home-assistant](https://github.com/sander110419/Fluvius-home-assistant)
+(MIT, see `THIRD_PARTY_NOTICES.md`). Unofficial: not affiliated with Fluvius.
+Sibling of `gladys-octopus-energy` and `gladys-tibber` (same
+`publishEnergyConsumption` model).
+
 ## Commands
 
 ```bash
 npm install
 npm test                                  # node --test, the built-in runner
-node --test test/devices.test.js          # one file
-node --test --test-name-pattern "plug"    # tests whose name matches
+node --test test/model.test.js            # one file
+node --test --test-name-pattern "429"     # tests whose name matches
+npm run audit                             # npm audit --omit=dev
 npm run lint                              # ESLint
 npm run format:check                      # Prettier, as the CI runs it
 npm run format                            # Prettier, fix in place
@@ -32,20 +43,37 @@ pushing.
 
 ```
 index.js                          SDK wiring only: handlers registered before connect()
-src/devices/index.js              registry of the device blueprints + dispatch helpers
-src/devices/<type>.js             one device type per file (buildDevice, onPoll, onSetValue...)
-src/scenes.js                     scene action handlers (manifest `scene_actions`)
-src/widgets.js                    dashboard widget handlers (manifest `widgets`)
-src/config.js                     DEFAULT_CONFIG (mirrors the manifest defaults) + normalization
-src/weather.js                    example driver (Open-Meteo)
+src/app.js                        FluviusApp: schedule, readings -> energy monitoring,
+                                  plain sensors, errors and retries, test button
+src/fluvius/auth.js               the B2C sign-in (MSAL settings, SelfAsserted, code, token)
+src/fluvius/api.js                the client: token, readings, 401/429/refusal rules
+src/fluvius/model.js              answers -> quarter hours, half hours, days, peak; local time (pure)
+src/devices.js                    the devices, feature keys, states (pure)
+src/config.js                     DEFAULTS (mirror the manifest defaults) + normalization
+src/constants.js                  endpoints, pacing, manifest keys
+src/i18n.js                       runtime texts (en/fr)
+src/http.js                       the only HTTP access (cookie jar, no blind redirect, bounded body)
 gladys-assistant-integration.json manifest: name, config_schema, actions, image...
 docs/en.md, docs/fr.md            user documentation, re-hosted by Gladys (mandatory)
+docs/nl.md                        Dutch documentation (linked from the manifest)
 test/                             node --test, against the SDK's fake Gladys (integration-sdk/testing)
 .github/scripts/release.mjs       release helpers (manifest bump, changelog), tested in test/
 ```
 
 ## Rules
 
+- **Fluvius keys are forever too**: the external ids `electricity:<EAN>`,
+  `gas:<EAN>`, the `FEATURE` keys of `src/devices.js`, the manifest keys.
+- **Energy monitoring**: the consumption goes ONLY through
+  `publishEnergyConsumption` (dated by Fluvius), never `publishStates`, and
+  there is no index feature. The injection never goes into a consumption or
+  index feature (it would be billed): it is a plain `unknown` sensor.
+- **Be polite with Fluvius**: 4 reads a day, the full window once a day, the
+  last 3 days otherwise, one sign-in per expired token, refused credentials
+  tried again every 6 hours only, a 429 pauses every call (1 min to 6 h).
+- **The password goes to Fluvius only**: every URL must pass `isAllowedUrl`
+  (https, `*.fluvius.be`, `*.b2clogin.com`). Never log a URL, a body, a
+  header, the e-mail, the password, a code or a token.
 - **External ids are forever.** Build them with
   `gladys.externalIds(type, platformId)`, `platformId` being the unique id the
   platform gives the device (serial, cloud id, MAC), never a label. Gladys keys
@@ -62,15 +90,14 @@ test/                             node --test, against the SDK's fake Gladys (in
   in `CHANGELOG.md` (`### Added`, `Changed`, `Fixed`, `Removed`, `Security`).
   Never write a version heading: the Release workflow moves the section, and it
   becomes the notes of the GitHub Release.
-- **Manifest.** Texts are multi-language objects `{ "en": ..., "fr": ... }`:
+- **Manifest.** Texts are multi-language objects `{ "en": ..., "fr": ..., "nl": ... }`:
   `label`, `description` and `placeholder` alike, never a plain string. The
-  catalog `description` holds 10 to 100 characters per language. A field the
-  older cores do not know needs a higher `gladys_version` minimum
-  (`categories`: 4.86.0; `widgets`, `scene_triggers`, `scene_actions`,
-  `type: "provider"`: 5.1.0). `test/manifest.test.js` ties the manifest to the
-  code (defaults, action, scene and widget handlers): change both sides
+  catalog `description` holds 10 to 100 characters per language.
+  `test/manifest.test.js` ties the manifest to the code: change both sides
   together.
-- **User-facing text** is bilingual (English and French): action messages,
-  manifest texts, and `docs/en.md` / `docs/fr.md`, kept in sync.
+- **User-facing text**: English and French everywhere (runtime messages,
+  manifest, `docs/en.md` / `docs/fr.md`), Dutch in the manifest and
+  `docs/nl.md`, kept in sync. Files are UTF-8 without BOM
+  (`test/encoding.test.js`).
 - **Style.** Prettier formats, ESLint catches mistakes. Comments explain why,
   in English. Tests never touch the network.

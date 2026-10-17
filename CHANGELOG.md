@@ -12,44 +12,25 @@ the notes of the version's GitHub Release.
 
 ### Added
 
-- A working example of scene triggers, scene actions and dashboard widgets
-  (Gladys 5.1.0 or later).
-- `CHANGELOG.md`, rolled by the Release workflow.
-- A GitHub Release for every version, with its changelog section as notes: the
-  Gladys Supervision page links each version to the repository's releases.
-- CI runs the tests on Node 22 and 24, and builds the Docker image.
-- Dependabot keeps the npm dependencies and the GitHub Actions up to date.
-- `SECURITY.md` (how to report a vulnerability) and `CLAUDE.md` (project rules
-  for contributors and coding assistants).
-- Manifest tests: `version` matches `package.json`, `docker_image` is tagged
-  with it, descriptions hold 10 to 100 characters, placeholders are
-  multi-language objects.
-- The latitude and longitude fields show an example value as placeholder.
+- Sign-in to Mijn Fluvius with the e-mail and password of a personal account
+  (the Azure AD B2C flow of the website, over HTTP), ported from
+  sander110419/Fluvius-home-assistant. A login asking for a second factor or
+  another browser step is reported, never retried in a loop.
+- One device per configured meter (electricity and/or gas, by EAN): the
+  consumption fed, dated, to the Gladys energy monitoring with
+  `publishEnergyConsumption` (Gladys 5.2+), by half hour from the quarter-hour
+  (electricity) or hourly (gas) readings, or by day.
+- Plain sensors: the consumption and the injection of the latest complete day
+  published, and the monthly peak of the capacity tariff (kW). The injection
+  is never counted as consumption.
+- Four reads a day; the last days read again once a day (7 by default, up to 31) to catch late or corrected readings, the last 3 days otherwise.
+- Resilience: passing failures retried after 15, 30, 60, then every 120
+  minutes; refused credentials retried every 6 hours only; a 429 pauses every
+  call (1 minute to 6 hours); a 401 signs in again once.
+- "Test the connection" button: signs in and reads yesterday's total of each
+  meter.
+- Documentation in English, French and Dutch; `THIRD_PARTY_NOTICES.md` with
+  the MIT license of sander110419/Fluvius-home-assistant, shipped in the
+  image.
 
-### Changed
-
-- Node.js 22 or later is required (Node 20 is end-of-life).
-- Integration SDK 0.15.0. The tests now run against the fake Gladys of the
-  SDK, which refuses the payloads Gladys refuses.
-- The refresh interval is one minute minimum, the fastest Gladys polls a
-  device. The plug's power is only sent when it changes, and every 30
-  minutes otherwise.
-
-### Fixed
-
-- Gladys refused the devices of the Discovery tab: the weather station and
-  the plug declared their poll frequency in seconds instead of one of the
-  values Gladys accepts, and were never polled. They now poll every minute,
-  and the readings follow the refresh interval of the configuration.
-
-- The release commit no longer fails `npm run format:check`: the Release
-  workflow updates the manifest `version` and `docker_image` in place instead
-  of re-printing the whole file with `jq`.
-- The integration can write to `/data`: the image creates the directory owned
-  by the `node` user, a new Docker volume was owned by root.
-- A sub-container running the integration's own image follows it to the new
-  tag at each release, as well as in the manifest of the build summary: it kept
-  the previous tag, which may not exist on the registry. Sub-containers on a
-  third-party image (a broker, a database...) keep theirs.
-
-[Unreleased]: https://github.com/GladysAssistant/integration-template-js/commits/main
+[Unreleased]: https://github.com/LM1LC3N7/gladys-fluvius/commits/main

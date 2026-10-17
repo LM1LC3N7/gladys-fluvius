@@ -1,177 +1,212 @@
 {
   "manifest_version": 1,
   "type": "device",
-  "name": "Demo Devices Template",
+  "name": "Fluvius (Flanders)",
   "description": {
-    "en": "Starter template showing sensors, a switch, a dimmable light and a smart plug.",
-    "fr": "Template de démarrage : capteurs, interrupteur, lampe variable et prise connectée."
+    "en": "Unofficial: Mijn Fluvius smart meter (Flanders): consumption, injection, capacity peak.",
+    "fr": "Non officiel : compteur Mijn Fluvius (Flandre) : consommation, injection, pic capacitaire.",
+    "nl": "Niet officieel: digitale meter via Mijn Fluvius: verbruik, injectie en capaciteitspiek."
   },
-  "version": "1.0.0",
-  "docker_image": "ghcr.io/gladysassistant/integration-template-js:1.0.0",
-  "gladys_version": ">=5.1.0",
-  "cover_image": "https://raw.githubusercontent.com/GladysAssistant/integration-template-js/master/cover.png",
-  "categories": ["lighting", "security", "environment"],
-  "transports": ["local", "cloud"],
+  "version": "0.1.0",
+  "docker_image": "ghcr.io/lm1lc3n7/gladys-fluvius:0.1.0",
+  "gladys_version": ">=5.2.0",
+  "cover_image": "https://raw.githubusercontent.com/LM1LC3N7/gladys-fluvius/main/cover.png",
+  "categories": ["energy"],
+  "transports": ["cloud"],
   "config_schema": [
     {
       "key": "intro",
       "type": "section",
-      "label": { "en": "Getting started", "fr": "Pour commencer" },
+      "label": {
+        "en": "Mijn Fluvius account (Flanders, Belgium)",
+        "fr": "Compte Mijn Fluvius (Flandre, Belgique)",
+        "nl": "Mijn Fluvius-account (Vlaanderen)"
+      },
       "description": {
-        "en": "The demo weather station reads real data from the free Open-Meteo API: pick the coordinates to observe. No account, no API key.",
-        "fr": "La station météo de démonstration lit de vraies données via l'API gratuite Open-Meteo : choisissez les coordonnées à observer. Pas de compte, pas de clé d'API."
+        "en": "Unofficial connector, not affiliated with Fluvius. It signs in to Mijn Fluvius with your e-mail and password, like the website, and reads your digital meter: the consumption is sent to the Gladys energy monitoring (by half hour or by day, with the delay of Fluvius, usually a day or more), the injection of the last published day and the monthly peak of the capacity tariff are shown as sensors. Personal accounts only (professional accounts need itsme/eID). Two-step verification cannot be handled: the integration says so if your login asks for it.",
+        "fr": "Connecteur non officiel, sans lien avec Fluvius. Il se connecte à Mijn Fluvius avec votre e-mail et votre mot de passe, comme le site, et lit votre compteur numérique : la consommation est envoyée au suivi énergétique de Gladys (par demi-heure ou par jour, avec le retard de Fluvius, en général un jour ou plus), l'injection du dernier jour publié et le pic mensuel du tarif capacitaire sont affichés en capteurs. Comptes particuliers seulement (les comptes professionnels demandent itsme/eID). La double authentification n'est pas gérée : l'intégration le signale si votre connexion la demande.",
+        "nl": "Niet-officiële koppeling, niet verbonden met Fluvius. Ze meldt zich aan bij Mijn Fluvius met uw e-mail en wachtwoord, zoals de website, en leest uw digitale meter: het verbruik gaat naar de energiemonitoring van Gladys (per half uur of per dag, met de vertraging van Fluvius, meestal een dag of meer), de injectie van de laatst gepubliceerde dag en de maandpiek van het capaciteitstarief worden als sensoren getoond. Alleen particuliere accounts (professionele accounts vragen itsme/eID). Tweestapsverificatie wordt niet ondersteund: de integratie meldt het als uw aanmelding erom vraagt."
       },
       "links": [
         {
-          "url": "https://open-meteo.com/en/docs",
-          "label": { "en": "Open-Meteo documentation", "fr": "Documentation Open-Meteo" }
+          "url": "https://mijn.fluvius.be/",
+          "label": { "en": "Mijn Fluvius", "fr": "Mijn Fluvius", "nl": "Mijn Fluvius" }
+        },
+        {
+          "url": "https://github.com/LM1LC3N7/gladys-fluvius/blob/main/docs/fr.md",
+          "label": { "en": "Guide (French)", "fr": "Guide (français)", "nl": "Handleiding (Frans)" }
+        },
+        {
+          "url": "https://github.com/LM1LC3N7/gladys-fluvius/blob/main/docs/en.md",
+          "label": {
+            "en": "Guide (English)",
+            "fr": "Guide (anglais)",
+            "nl": "Handleiding (Engels)"
+          }
+        },
+        {
+          "url": "https://github.com/LM1LC3N7/gladys-fluvius/blob/main/docs/nl.md",
+          "label": {
+            "en": "Guide (Dutch)",
+            "fr": "Guide (néerlandais)",
+            "nl": "Handleiding (Nederlands)"
+          }
         }
       ]
     },
     {
-      "key": "latitude",
-      "type": "number",
-      "label": { "en": "Latitude", "fr": "Latitude" },
-      "description": {
-        "en": "Latitude used for the demo weather sensor.",
-        "fr": "Latitude utilisée par le capteur météo de démonstration."
-      },
-      "placeholder": { "en": "e.g. 48.8566", "fr": "ex. 48.8566" },
+      "key": "email",
+      "type": "string",
       "required": true,
-      "default": 48.8566,
-      "min": -90,
-      "max": 90
+      "label": {
+        "en": "Mijn Fluvius e-mail",
+        "fr": "E-mail Mijn Fluvius",
+        "nl": "E-mail Mijn Fluvius"
+      },
+      "placeholder": {
+        "en": "e.g. me@example.be",
+        "fr": "ex. moi@exemple.be",
+        "nl": "bv. ik@voorbeeld.be"
+      }
     },
     {
-      "key": "longitude",
-      "type": "number",
-      "label": { "en": "Longitude", "fr": "Longitude" },
-      "description": {
-        "en": "Longitude used for the demo weather sensor.",
-        "fr": "Longitude utilisée par le capteur météo de démonstration."
-      },
-      "placeholder": { "en": "e.g. 2.3522", "fr": "ex. 2.3522" },
+      "key": "password",
+      "type": "secret",
       "required": true,
-      "default": 2.3522,
-      "min": -180,
-      "max": 180
+      "label": {
+        "en": "Mijn Fluvius password",
+        "fr": "Mot de passe Mijn Fluvius",
+        "nl": "Wachtwoord Mijn Fluvius"
+      },
+      "description": {
+        "en": "Kept by Gladys in its database (not encrypted), never shown again, only sent to Fluvius (login.fluvius.be).",
+        "fr": "Gardé par Gladys dans sa base (non chiffré), jamais réaffiché, envoyé seulement à Fluvius (login.fluvius.be).",
+        "nl": "Door Gladys in haar database bewaard (niet versleuteld), nooit opnieuw getoond, enkel naar Fluvius gestuurd (login.fluvius.be)."
+      }
     },
     {
-      "key": "unit",
-      "type": "select",
-      "label": { "en": "Temperature unit", "fr": "Unité de température" },
+      "key": "electricity_ean",
+      "type": "string",
       "required": false,
-      "default": "celsius",
+      "label": {
+        "en": "Electricity EAN",
+        "fr": "EAN électricité",
+        "nl": "EAN elektriciteit"
+      },
+      "description": {
+        "en": "The 18-digit code of the connection point (starts with 54), on your bills and in Mijn Fluvius. Empty: no electricity meter.",
+        "fr": "Le code à 18 chiffres du point de raccordement (commence par 54), sur vos factures et dans Mijn Fluvius. Vide : pas de compteur d'électricité.",
+        "nl": "De 18-cijferige code van het aansluitingspunt (begint met 54), op uw facturen en in Mijn Fluvius. Leeg: geen elektriciteitsmeter."
+      },
+      "placeholder": {
+        "en": "541448800000000000",
+        "fr": "541448800000000000",
+        "nl": "541448800000000000"
+      }
+    },
+    {
+      "key": "electricity_serial",
+      "type": "string",
+      "required": false,
+      "label": {
+        "en": "Electricity meter serial number",
+        "fr": "Numéro de série du compteur d'électricité",
+        "nl": "Serienummer elektriciteitsmeter"
+      },
+      "description": {
+        "en": "Shown in Mijn Fluvius with the meter and printed on it (e.g. 1SAG1100000000).",
+        "fr": "Affiché dans Mijn Fluvius avec le compteur et imprimé dessus (ex. 1SAG1100000000).",
+        "nl": "Zichtbaar in Mijn Fluvius bij de meter en erop gedrukt (bv. 1SAG1100000000)."
+      }
+    },
+    {
+      "key": "gas_ean",
+      "type": "string",
+      "required": false,
+      "label": {
+        "en": "Gas EAN",
+        "fr": "EAN gaz",
+        "nl": "EAN gas"
+      },
+      "description": {
+        "en": "Empty: no gas meter.",
+        "fr": "Vide : pas de compteur de gaz.",
+        "nl": "Leeg: geen gasmeter."
+      }
+    },
+    {
+      "key": "gas_serial",
+      "type": "string",
+      "required": false,
+      "label": {
+        "en": "Gas meter serial number",
+        "fr": "Numéro de série du compteur de gaz",
+        "nl": "Serienummer gasmeter"
+      }
+    },
+    {
+      "key": "resolution",
+      "type": "select",
+      "required": false,
+      "default": "detailed",
+      "label": {
+        "en": "Readings",
+        "fr": "Relevés",
+        "nl": "Meetwaarden"
+      },
+      "description": {
+        "en": "Detailed: quarter hours (electricity) or hours (gas), sent by half hour; they must be turned on in Mijn Fluvius. Daily: one value per day. Chosen before creating the devices: changing it later needs the devices deleted and created again.",
+        "fr": "Détaillés : quarts d'heure (électricité) ou heures (gaz), envoyés par demi-heure ; ils doivent être activés dans Mijn Fluvius. Journaliers : une valeur par jour. À choisir avant de créer les appareils : changer ensuite demande de supprimer et recréer les appareils.",
+        "nl": "Gedetailleerd: kwartierwaarden (elektriciteit) of uurwaarden (gas), per half uur doorgestuurd; ze moeten in Mijn Fluvius aanstaan. Dagelijks: één waarde per dag. Kies vóór het aanmaken van de toestellen: later wijzigen vraagt de toestellen te verwijderen en opnieuw aan te maken."
+      },
       "options": [
-        { "value": "celsius", "label": { "en": "Celsius", "fr": "Celsius" } },
-        { "value": "fahrenheit", "label": { "en": "Fahrenheit", "fr": "Fahrenheit" } }
+        {
+          "value": "detailed",
+          "label": {
+            "en": "Detailed (quarter hour / hour)",
+            "fr": "Détaillés (quart d'heure / heure)",
+            "nl": "Gedetailleerd (kwartier / uur)"
+          }
+        },
+        {
+          "value": "daily",
+          "label": { "en": "Daily", "fr": "Journaliers", "nl": "Dagelijks" }
+        }
       ]
     },
     {
-      "key": "poll_frequency",
+      "key": "days_back",
       "type": "number",
-      "label": { "en": "Refresh interval (s)", "fr": "Intervalle de rafraîchissement (s)" },
-      "description": {
-        "en": "How often sensors are polled, in seconds (one minute minimum).",
-        "fr": "Fréquence d'interrogation des capteurs, en secondes (une minute minimum)."
-      },
       "required": false,
-      "default": 300,
-      "min": 60,
-      "max": 3600
+      "default": 7,
+      "min": 3,
+      "max": 31,
+      "label": {
+        "en": "Days read again",
+        "fr": "Jours relus",
+        "nl": "Dagen opnieuw gelezen"
+      },
+      "description": {
+        "en": "Once a day, these last days are read again to catch the readings Fluvius publishes late or corrects (the other reads take the last 3 days).",
+        "fr": "Une fois par jour, ces derniers jours sont relus pour rattraper les relevés que Fluvius publie en retard ou corrige (les autres lectures prennent les 3 derniers jours).",
+        "nl": "Eén keer per dag worden deze laatste dagen opnieuw gelezen om laat gepubliceerde of gecorrigeerde meetwaarden op te halen (de andere lezingen nemen de laatste 3 dagen)."
+      }
     }
   ],
   "actions": [
     {
-      "key": "test_weather",
-      "label": { "en": "Test the weather provider", "fr": "Tester le fournisseur météo" },
-      "timeout_seconds": 30
-    },
-    {
-      "key": "identify",
-      "label": { "en": "Identify a device", "fr": "Identifier un appareil" },
-      "fields": [
-        {
-          "key": "device",
-          "type": "select",
-          "source": "devices",
-          "label": { "en": "Device", "fr": "Appareil" },
-          "required": true
-        }
-      ]
-    }
-  ],
-  "scene_triggers": [
-    {
-      "key": "motion_detected",
-      "label": { "en": "Motion detected", "fr": "Mouvement détecté" },
-      "description": {
-        "en": "A demo motion sensor saw a person or an animal move.",
-        "fr": "Un détecteur de démonstration a vu bouger une personne ou un animal."
+      "key": "test_connection",
+      "timeout_seconds": 60,
+      "label": {
+        "en": "Test the connection",
+        "fr": "Tester la connexion",
+        "nl": "Verbinding testen"
       },
-      "fields": [
-        {
-          "key": "device",
-          "type": "select",
-          "source": "devices",
-          "label": { "en": "Sensor", "fr": "Détecteur" }
-        },
-        {
-          "key": "target",
-          "type": "multi_select",
-          "label": { "en": "What moved", "fr": "Ce qui a bougé" },
-          "options": [
-            { "value": "person", "label": { "en": "Person", "fr": "Personne" } },
-            { "value": "animal", "label": { "en": "Animal", "fr": "Animal" } }
-          ]
-        }
-      ],
-      "variables": [
-        {
-          "key": "target",
-          "type": "string",
-          "label": { "en": "What moved", "fr": "Ce qui a bougé" }
-        }
-      ]
-    }
-  ],
-  "scene_actions": [
-    {
-      "key": "identify_device",
-      "label": { "en": "Identify a device", "fr": "Identifier un appareil" },
       "description": {
-        "en": "Make a device signal itself (the demo light blinks).",
-        "fr": "Fait se signaler un appareil (la lampe de démonstration clignote)."
-      },
-      "timeout_seconds": 15,
-      "fields": [
-        {
-          "key": "device",
-          "type": "select",
-          "source": "devices",
-          "label": { "en": "Device", "fr": "Appareil" },
-          "required": true
-        }
-      ],
-      "outputs": [
-        {
-          "key": "signalled",
-          "type": "boolean",
-          "label": { "en": "Device signalled", "fr": "Appareil signalé" }
-        }
-      ]
-    }
-  ],
-  "widgets": [
-    {
-      "key": "demo_status",
-      "label": { "en": "Demo status", "fr": "État de la démo" },
-      "description": {
-        "en": "Live temperature and plug power, plug connection and observed location.",
-        "fr": "Température et puissance en direct, connexion de la prise, position observée."
-      },
-      "icon": "activity",
-      "action_timeout_seconds": 15
+        "en": "Signs in to Mijn Fluvius and reads yesterday's total of each meter.",
+        "fr": "Se connecte à Mijn Fluvius et lit le total d'hier de chaque compteur.",
+        "nl": "Meldt zich aan bij Mijn Fluvius en leest het totaal van gisteren van elke meter."
+      }
     }
   ]
 }
