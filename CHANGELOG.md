@@ -29,8 +29,10 @@ the notes of the version's GitHub Release.
   to 31) to catch late or corrected readings, the last 3 days otherwise.
 - Resilience: passing failures retried after 15, 30, 60, then every 120
   minutes; refused credentials, a refused fresh token or a changed login
-  page retried every 6 hours only; a 429 pauses every call (1 minute to 6
-  hours), even across reconnections; a 401 signs in again once.
+  page retried every 6 hours only (saving the form or the test button tries
+  at once); a 429 pauses every call (1 minute to 6 hours), even across
+  reconnections; a 401 signs in again once; a 403 or 408 of the login pages
+  is a passing failure.
 - "Test the connection" button: signs in and reads yesterday's total of each
   meter.
 - Documentation in English, French and Dutch; `THIRD_PARTY_NOTICES.md` with

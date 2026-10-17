@@ -311,3 +311,18 @@ test('data errors are sorted: 403, 404, 400, 5xx, not a list', async () => {
   fake = installFetch(fluviusRoutes({ history: () => json({ not: 'a list' }) }));
   await rejectsWith(client().history(ELEC_EAN, ELEC_SERIAL, range), 'http');
 });
+
+test('sign-in: a 403 or a 408 of the settings or the login page is a passing error', async () => {
+  for (const routes of [
+    { msal: () => json({}, 403) },
+    { msal: () => json({}, 408) },
+    { authorize: () => html('busy', 403) },
+    { authorize: () => html('slow', 408) },
+  ]) {
+    fake = installFetch(fluviusRoutes(routes));
+    await rejectsWith(authenticate(EMAIL, PASSWORD), 'http');
+    fake.restore();
+  }
+  fake = installFetch(fluviusRoutes({ msal: () => json({}, 404) }));
+  await rejectsWith(authenticate(EMAIL, PASSWORD), 'login_changed');
+});

@@ -55,6 +55,11 @@ export class FluviusClient {
     this.pause.until = value;
   }
 
+  /** Forget the last refusal (the user acted); the 429 pause is kept. */
+  unblock() {
+    this.blocked = undefined;
+  }
+
   paused() {
     return this.now() < this.pausedUntil;
   }

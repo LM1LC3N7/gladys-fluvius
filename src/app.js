@@ -113,8 +113,9 @@ export class FluviusApp {
 
   // --- Lifecycle -------------------------------------------------------------
 
-  start(raw = {}) {
-    return this.serialize(() => this.doStart(raw));
+  /** `fresh`: the user saved the form (not a reconnection): the 6-hour refusal delay ends. */
+  start(raw = {}, { fresh = false } = {}) {
+    return this.serialize(() => this.doStart(raw, { fresh }));
   }
 
   stop() {
@@ -145,7 +146,7 @@ export class FluviusApp {
     return invalid ? T.badMeter(invalid) : undefined;
   }
 
-  async doStart(raw) {
+  async doStart(raw, { fresh = false } = {}) {
     await this.doStop();
     const generation = ++this.generation;
     this.config = normalizeConfig(raw);
@@ -183,6 +184,10 @@ export class FluviusApp {
         now: this.now,
         pause: this.pause,
       });
+    } else if (fresh) {
+      // The user saved the form: maybe after fixing the account in a
+      // browser. The 6-hour refusal delay ends; the 429 pause never does.
+      this.client.unblock();
     }
     await this.discover();
     // Always armed, whatever the first read gave: never a dead integration.
@@ -501,6 +506,9 @@ export class FluviusApp {
     if (problem || !this.client) {
       return problem ?? T.noCredentials;
     }
+    // A press of the button is one real try: the 6-hour refusal delay does
+    // not answer for Fluvius (the 429 pause still does).
+    this.client.unblock();
     let timer;
     const late = new Promise((resolve) => {
       timer = this.timers.setTimeout(() => resolve(T.test.slow), TEST_ANSWER_WITHIN);

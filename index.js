@@ -25,7 +25,8 @@ gladys.onAction(ACTIONS.TEST, () => app.testConnection());
 // --- Configuration changed by the user ----------------------------------------
 gladys.onConfigUpdated((config) => {
   logger.info('Configuration updated: restarting');
-  return app.start(config);
+  // A save of the form ends the 6-hour refusal delay (never the 429 pause).
+  return app.start(config, { fresh: true });
 });
 
 // --- Connection lifecycle ------------------------------------------------------

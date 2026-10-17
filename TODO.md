@@ -109,7 +109,10 @@
   every client, the integration retries at the end of the pause; 401 on a
   reading → one new sign-in and one retry, never when the token was obtained
   by that same call (`token_refused` at once); refused credentials and
-  `interaction_required` → the same error for 6 hours without any call;
+  `interaction_required` → the same error for 6 hours without any call
+  (a save of the form or the test button ends that delay at once, never the
+  429 pause; a reconnection keeps it); a 403 or 408 of the MSAL settings or
+  the login page is a passing failure (normal backoff);
   `token_refused` and `login_changed` → next try in 6 hours with their own
   status; 403 / 404 / 400 → that meter only, shown in the status; others →
   retry after 15, 30, 60, then 120 minutes. The regular 6-hour poll stays

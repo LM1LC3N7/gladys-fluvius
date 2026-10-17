@@ -300,6 +300,49 @@ test('refused credentials: said, tried again in 6 hours only, the poll stays arm
   assert.equal(fake.calls.length, calls, 'no new sign-in before 6 hours');
 });
 
+test('saving the form or the test button ends the 6-hour delay, never the 429 pause', async () => {
+  const config = { ...CONFIG, password: 'wrong' };
+  const { app, gladys } = await setup({ config, devices: [created('electricity')] });
+  const tries = () => fake.named('selfAsserted').length;
+  await app.start(config);
+  await app.idle();
+  assert.equal(tries(), 1);
+  // A reconnection keeps the delay: nothing sent.
+  await app.start(config);
+  await app.idle();
+  assert.equal(tries(), 1);
+  // A save of the form: one new try.
+  await app.start(config, { fresh: true });
+  await app.idle();
+  assert.equal(tries(), 2);
+  // The test button: one new try too.
+  const ack = await gladys.fake.action(ACTIONS.TEST, {});
+  assert.match(ack.data.message.en, /refused the e-mail or the password/);
+  assert.equal(tries(), 3);
+  // During a 429 pause, neither sends anything.
+  app.pause.until = NOW + 600_000;
+  await app.start(config, { fresh: true });
+  await app.idle();
+  const paused = await gladys.fake.action(ACTIONS.TEST, {});
+  assert.match(paused.data.message.en, /slow down/);
+  assert.equal(tries(), 3);
+});
+
+test('a 403 or a 408 of the login pages is a passing failure, not a changed login', async () => {
+  for (const routes of [{ msal: () => json({}, 403) }, { authorize: () => json({}, 408) }]) {
+    const { app, gladys, timers } = await setup({ routes, devices: [created('electricity')] });
+    await app.start(CONFIG);
+    await app.idle();
+    assert.match(status(gladys).message.en, /new try in 15 min/);
+    assert.deepEqual(
+      timers.timeouts().map((t) => t.ms),
+      [RETRY_BACKOFF[0]],
+    );
+    await app.stop();
+    fake.restore();
+  }
+});
+
 test('two-step verification asked: said clearly, no loop', async () => {
   const { app, gladys, timers } = await setup({
     routes: { confirmed: () => new Response('<html>code</html>', { status: 200 }) },

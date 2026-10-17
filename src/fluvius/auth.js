@@ -147,8 +147,10 @@ async function getFollowing(url, jar) {
   throw changed('too many redirects');
 }
 
+// A 5xx, a 403 (a proxy or firewall in front of Fluvius) or a 408 is a
+// passing failure (normal backoff), not a changed login.
 const httpFailure = (status, step) =>
-  status >= 500
+  status >= 500 || status === 403 || status === 408
     ? new FluviusError('http', `Fluvius answered ${status} (${step})`, status)
     : changed(`${step} answered ${status}`);
 
