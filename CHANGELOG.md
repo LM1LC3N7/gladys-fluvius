@@ -10,6 +10,8 @@ the notes of the version's GitHub Release.
 
 ## [Unreleased]
 
+## [0.1.1] - 2026-10-17
+
 ### Added
 
 - Sign-in to Mijn Fluvius with the e-mail and password of a personal account
@@ -39,4 +41,5 @@ the notes of the version's GitHub Release.
   the MIT license of sander110419/Fluvius-home-assistant, shipped in the
   image.
 
-[Unreleased]: https://github.com/LM1LC3N7/gladys-fluvius/commits/main
+[Unreleased]: https://github.com/LM1LC3N7/gladys-fluvius/compare/v0.1.1...HEAD
+[0.1.1]: https://github.com/LM1LC3N7/gladys-fluvius/releases/tag/v0.1.1
