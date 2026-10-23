@@ -1,6 +1,6 @@
 {
   "name": "gladys-fluvius",
-  "version": "0.1.1",
+  "version": "0.1.2",
   "private": true,
   "description": "Fluvius (Flanders, Belgium) for Gladys Assistant: the digital meter read through Mijn Fluvius, its consumption fed to the energy monitoring, the injection and the monthly capacity peak as sensors.",
   "type": "module",
