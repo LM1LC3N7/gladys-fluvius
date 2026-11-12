@@ -2,7 +2,7 @@
 
 ## Before announcing
 
-- [ ] Test on a real Gladys 5.2+ with a real personal Mijn Fluvius account
+- [ ] Test on a real Gladys 5.3+ with a real personal Mijn Fluvius account
       (electricity with solar panels, gas, with and without quarter-hour
       readings): sign-in, test button, devices, the 30-minute and daily
       consumption in the energy monitoring, the injection and peak sensors.

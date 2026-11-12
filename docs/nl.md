@@ -38,7 +38,7 @@ keren de laatste 3 dagen. Een opnieuw gelezen waarde telt nooit dubbel.
 
 ## Voordat u begint
 
-- Gladys **5.2.0 of nieuwer**, met als tijdzone **Europe/Brussels,
+- Gladys **5.3.0 of nieuwer**, met als tijdzone **Europe/Brussels,
   Europe/Paris of Europe/Amsterdam** (dezelfde klok als België).
 - Een **particulier** Mijn Fluvius-account met e-mail en wachtwoord.
   Professionele accounts (itsme / eID) werken niet.
