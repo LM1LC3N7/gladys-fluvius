@@ -39,7 +39,7 @@ day): a reading read again or corrected never counts twice.
 
 ## Before you start
 
-- Gladys **5.2.0 or newer** (dated consumption of the energy monitoring),
+- Gladys **5.3.0 or newer** (catalog countries; 5.2.0 for dated consumption of the energy monitoring),
   with its time zone set to **Europe/Brussels, Europe/Paris or
   Europe/Amsterdam** (the same clock as Belgium: the days of Fluvius then
   match the days of Gladys).

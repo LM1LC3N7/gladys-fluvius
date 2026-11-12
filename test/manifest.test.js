@@ -34,7 +34,11 @@ function* texts(node, path = '') {
 test('the store basics', () => {
   assert.equal(manifest.manifest_version, 1);
   assert.equal(manifest.type, 'device');
-  assert.match(manifest.gladys_version, />=5\.2\.0/, 'publishEnergyConsumption needs Gladys 5.2');
+  assert.match(
+    manifest.gladys_version,
+    />=5\.3\.0/,
+    'publishEnergyConsumption needs Gladys 5.2, the catalog countries 5.3',
+  );
   assert.equal(manifest.docker_image, `ghcr.io/lm1lc3n7/gladys-fluvius:${manifest.version}`);
   assert.equal(manifest.version, pkg.version);
   assert.equal(lock.version, pkg.version);
@@ -87,4 +91,13 @@ test('the actions of the manifest are the handlers of the code', () => {
   );
   assert.ok(index.includes('onAction(ACTIONS.TEST'));
   assert.ok(index.includes('onDeviceCreated'));
+});
+
+test('the catalog countries: Belgium, which needs Gladys >= 5.3.0', () => {
+  assert.deepEqual(manifest.countries, ['BE']);
+  const [major, minor] = manifest.gladys_version
+    .match(/>=\s*(\d+)\.(\d+)/)
+    .slice(1)
+    .map(Number);
+  assert.ok(major > 5 || (major === 5 && minor >= 3), 'countries needs Gladys 5.3.0');
 });

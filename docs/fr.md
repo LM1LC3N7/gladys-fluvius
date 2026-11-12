@@ -40,7 +40,7 @@ par jour) : un relevé relu ou corrigé n'est jamais compté deux fois.
 
 ## Avant de commencer
 
-- Gladys **5.2.0 ou plus récent** (consommation datée du suivi énergétique),
+- Gladys **5.3.0 ou plus récent** (pays du catalogue ; 5.2.0 pour consommation datée du suivi énergétique),
   avec le fuseau horaire **Europe/Brussels, Europe/Paris ou
   Europe/Amsterdam** (la même heure qu'en Belgique : les jours de Fluvius
   correspondent alors à ceux de Gladys).
